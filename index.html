@@ -114,8 +114,13 @@
         .btn-slash { background: #64748b; color: white; }
         .btn-minus { background: #f97316; color: white; }
         .btn-equal { background: var(--accent); color: white; }
-        .btn-adv-err { background: #9333ea; color: white; padding: 12px; font-size: 11px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+        
+        /* BOTÕES DE ERRO DO ADVERSÁRIO COM CONTADOR */
+        .btn-adv-box { display: flex; flex-direction: column; gap: 4px; }
+        .btn-adv-err { background: #9333ea; color: white; padding: 10px 4px; font-size: 11px; font-weight: bold; border: none; border-radius: 8px 8px 0 0; cursor: pointer; transition: 0.2s; text-align: center; }
         .btn-adv-err:hover { opacity: 0.9; }
+        .btn-adv-sub { background: #581c87; color: #e9d5ff; border: none; border-radius: 0 0 8px 8px; padding: 3px; font-size: 10px; cursor: pointer; font-weight: bold; }
+        .btn-adv-sub:hover { background: #6b21a8; color: white; }
 
         .scout-report-section { margin-top: 25px; background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 15px; overflow-x: auto; }
         .scout-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10px; text-align: center; color: var(--white); }
@@ -342,7 +347,7 @@
             </div>
         </div>
 
-        <!-- NOVO PARÂMETRO: ATAQUE SIDE-OUT -->
+        <!-- ATAQUE SIDE-OUT -->
         <div class="scout-action-group" style="border-color: var(--primary);">
             <label style="color: var(--primary);">Ataque Side-Out (K1)</label>
             <div class="scout-btn-grid">
@@ -377,13 +382,34 @@
         </div>
     </div>
 
-    <!-- NOVO BLOCO: ERROS E PONTOS DADOS PELO ADVERSÁRIO -->
+    <!-- ERROS E PONTOS DADOS PELO ADVERSÁRIO COM CONTADORES EM TEMPO REAL -->
     <div class="scout-action-group" style="margin-top: 15px; background: rgba(147, 51, 234, 0.15); border: 1px solid #9333ea;">
-        <label style="color: #c084fc; text-align: center; font-size: 12px;">PONTOS DADOS PELO ADVERSÁRIO (ERROS DELES)</label>
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px;">
-            <button class="btn-adv-err" onclick="trackAdvError('serve')">⚠️ Serviço Falhado</button>
-            <button class="btn-adv-err" onclick="trackAdvError('attack')">💥 Ataque Falhado</button>
-            <button class="btn-adv-err" onclick="trackAdvError('foul')">🚫 Falta / Outros</button>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <label style="color: #c084fc; font-size: 11px; margin:0;">PONTOS DADOS PELO ADVERSÁRIO (SET <span id="adv-set-num">1</span>)</label>
+            <span style="font-size:11px; font-weight:bold; color:#e9d5ff;" id="adv-total-count">TOTAL: 0 pts</span>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+            <div class="btn-adv-box">
+                <button class="btn-adv-err" onclick="trackAdvError('serve', 1)">
+                    ⚠️ Serviço Falhado<br><span id="cnt-adv-serve" style="font-size:14px; color:#fef08a;">0</span>
+                </button>
+                <button class="btn-adv-sub" onclick="trackAdvError('serve', -1)">-1 Erro</button>
+            </div>
+            
+            <div class="btn-adv-box">
+                <button class="btn-adv-err" onclick="trackAdvError('attack', 1)">
+                    💥 Ataque Falhado<br><span id="cnt-adv-attack" style="font-size:14px; color:#fef08a;">0</span>
+                </button>
+                <button class="btn-adv-sub" onclick="trackAdvError('attack', -1)">-1 Erro</button>
+            </div>
+
+            <div class="btn-adv-box">
+                <button class="btn-adv-err" onclick="trackAdvError('foul', 1)">
+                    🚫 Falta / Outros<br><span id="cnt-adv-foul" style="font-size:14px; color:#fef08a;">0</span>
+                </button>
+                <button class="btn-adv-sub" onclick="trackAdvError('foul', -1)">-1 Erro</button>
+            </div>
         </div>
     </div>
 
@@ -453,7 +479,7 @@
             {n: 7, nome: "Maria Luisa Soutelo"}, {n: 8, nome: "Nataliia Karpets"}, {n: 9, nome: "Carolina Braga"}, {n: 10, nome: "Clara Pires"}
         ],
         scoutData: {},
-        advErrors: {} // Armazena erros do adversario por Set
+        advErrors: {}
     };
 
     let liveState = { 
@@ -475,10 +501,7 @@
     let selectedScoutAtleta = null;
     let selectedIndexForSub = null; 
 
-    // ============================================================
     // MOTOR DE CÁLCULOS ESTATÍSTICOS DATAVOLLEY
-    // ============================================================
-
     const QUALITY_WEIGHTS = { "#": 1.00, "+": 0.75, "!": 0.50, "-": 0.25, "=": 0.00 };
     const SETTING_WEIGHTS = { "#": 1.00, "+": 0.85, "!": 0.70, "-": 0.40, "=": 0.00 };
 
@@ -611,19 +634,23 @@
         if(navigator.vibrate) navigator.vibrate(50);
     };
 
-    // NOVO REGISTO: ERROS DO ADVERSÁRIO
-    window.trackAdvError = (tipo) => {
+    // ATUALIZADO: REGISTO DE ERROS COM CONTADOR DE INCREMENTO/DECREMENTO
+    window.trackAdvError = (tipo, delta = 1) => {
         if(!state.advErrors) state.advErrors = {};
         if(!state.advErrors[currentScoutSet]) state.advErrors[currentScoutSet] = { serve: 0, attack: 0, foul: 0 };
         
-        state.advErrors[currentScoutSet][tipo] = (state.advErrors[currentScoutSet][tipo] || 0) + 1;
+        let valAtual = state.advErrors[currentScoutSet][tipo] || 0;
+        let novoVal = Math.max(0, valAtual + delta);
+        state.advErrors[currentScoutSet][tipo] = novoVal;
         
-        let rotulo = tipo === 'serve' ? 'Serviço Falhado' : tipo === 'attack' ? 'Ataque Falhado' : 'Falta/Outros';
-        state.logs.push(`SET ${currentScoutSet}: Ponto de Erro do Adversário (${rotulo})`);
-        
+        if(delta > 0) {
+            let rotulo = tipo === 'serve' ? 'Serviço Falhado' : tipo === 'attack' ? 'Ataque Falhado' : 'Falta/Outros';
+            state.logs.push(`SET ${currentScoutSet}: Ponto por Erro do Adversário (${rotulo})`);
+        }
+
         sync();
-        if(navigator.vibrate) navigator.vibrate(80);
-        alert(`+1 Ponto registado por erro do adversário (${rotulo}) no SET ${currentScoutSet}!`);
+        renderScoutInterface();
+        if(navigator.vibrate) navigator.vibrate(50);
     };
 
     window.resetScoutData = () => {
@@ -635,6 +662,7 @@
                 state.advErrors[currentScoutSet] = { serve: 0, attack: 0, foul: 0 };
             }
             sync();
+            renderScoutInterface();
         }
     };
 
@@ -646,6 +674,16 @@
     }
 
     function renderScoutInterface() {
+        // Atualiza números dos contadores na interface do app
+        const advSetData = (state.advErrors && state.advErrors[currentScoutSet]) ? state.advErrors[currentScoutSet] : { serve: 0, attack: 0, foul: 0 };
+        document.getElementById('adv-set-num').innerText = currentScoutSet;
+        document.getElementById('cnt-adv-serve').innerText = advSetData.serve || 0;
+        document.getElementById('cnt-adv-attack').innerText = advSetData.attack || 0;
+        document.getElementById('cnt-adv-foul').innerText = advSetData.foul || 0;
+        
+        let totalPtsAdvSet = (advSetData.serve || 0) + (advSetData.attack || 0) + (advSetData.foul || 0);
+        document.getElementById('adv-total-count').innerText = `TOTAL: ${totalPtsAdvSet} pts`;
+
         const lista = document.getElementById('scout-lista-atletas');
         lista.innerHTML = "";
         
